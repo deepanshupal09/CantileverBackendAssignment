@@ -4,7 +4,7 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 @Injectable()
 export class CronService {
   // Custom cron expression for every second
-  @Cron(CronExpression.EVERY_MINUTE)
+  @Cron(CronExpression.EVERY_12_HOURS)
   async handleCron() {
     try {
       console.log("Scraping initiated...");
