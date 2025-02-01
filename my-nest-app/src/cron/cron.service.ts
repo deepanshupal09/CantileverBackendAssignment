@@ -3,7 +3,6 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 
 @Injectable()
 export class CronService {
-  // Custom cron expression for every second
   @Cron(CronExpression.EVERY_12_HOURS)
   async handleCron() {
     try {
