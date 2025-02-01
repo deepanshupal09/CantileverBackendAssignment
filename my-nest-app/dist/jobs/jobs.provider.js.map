@@ -1,0 +1,1 @@
+{"version":3,"file":"jobs.provider.js","sourceRoot":"","sources":["../../src/jobs/jobs.provider.ts"],"names":[],"mappings":";;;AACA,+CAAoC;AAEvB,QAAA,aAAa,GAAG;IAC3B;QACE,OAAO,EAAE,iBAAiB;QAC1B,UAAU,EAAE,CAAC,UAAsB,EAAE,EAAE,CAAC,UAAU,CAAC,aAAa,CAAC,iBAAG,CAAC;QACrE,MAAM,EAAE,CAAC,aAAa,CAAC;KACxB;CACF,CAAC"}
