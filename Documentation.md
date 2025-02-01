@@ -10,7 +10,7 @@ The NestJS server includes a cron job that triggers the Python scrapers at regul
 
 ## Architecture and Technologies
 
-### NestJS Server
+### Backend Server
 - **Framework**: NestJS
 - **Language**: TypeScript
 - **Database**: PostgreSQL
@@ -45,27 +45,38 @@ The cron job is implemented in the NestJS server using the `@nestjs/schedule` pa
     }
 
 ## Reasoning for Frequency
-- Regular Updates: Running the cron job every 12 hours ensures that the job listings are updated regularly.
-- Server Load: This frequency helps in balancing the server load and avoids overwhelming the target websites.
-- Data Freshness: Ensures that the data remains fresh and relevant for users.
-- Avoiding Duplications
-- To avoid duplications while scraping the same website repeatedly, the scrapers use the ON CONFLICT DO NOTHING clause in the PostgreSQL INSERT statements. This ensures that  if a job listing with the same apply_link already exists in the database, it will not be inserted again.
+- **Regular Updates**: Running the cron job every 12 hours ensures that the job listings are updated regularly.
+- **Server Load**: This frequency helps in balancing the server load and avoids overwhelming the target websites.
+- **Data Freshness**: Ensures that the data remains fresh and relevant for users.
+
+## Avoiding Duplications
+- To prevent duplicate entries while scraping the same website repeatedly, the scrapers use the ON CONFLICT DO UPDATE clause in the PostgreSQL INSERT statements. This ensures that if a job listing with the same apply_link already exists in the database, its details will be updated.
     
-    ```sh
-    insert_query = """
-    INSERT INTO public.jobs (apply_link, job_title, job_description, location, experience_level, company)
-    VALUES (%s, %s, %s, %s, %s, %s)
-    ON CONFLICT (apply_link) DO NOTHING;
-    """
+  ```sh
+  insert_query = """
+  INSERT INTO public.jobs (apply_link, job_title, job_description, location, experience_level, company)
+  VALUES (%s, %s, %s, %s, %s, %s)
+  ON CONFLICT (apply_link) 
+  DO UPDATE SET 
+      job_title = EXCLUDED.job_title,
+      job_description = EXCLUDED.job_description,
+      location = EXCLUDED.location,
+      experience_level = EXCLUDED.experience_level,
+      company = EXCLUDED.company;
+  """
+
+This ensures that:
+
+- If a job listing with the same `apply_link` exists, its details are updated.
+- If the job listing does not exist, a new entry is inserted.
 
 ## Additional Measures
-- Unique Constraints: Ensure that the apply_link field in the database has a unique constraint.
-- Hashing: Optionally, use hashing to detect duplicate content if URLs are not unique.
+- Unique Constraints: Ensure that the `apply_link` field in the database has a unique constraint
 
 ## Possible Errors
 ### Network Errors
-- Description: Issues with network connectivity can prevent the scrapers from accessing the target websites.
-- Handling: Implement retry logic and error handling in the scrapers.
+- **Description**: Issues with network connectivity can prevent the scrapers from accessing the target websites.
+- **Handling**: Implement retry logic and error handling in the scrapers.
     
     ```sh
     import requests
@@ -81,8 +92,8 @@ The cron job is implemented in the NestJS server using the `@nestjs/schedule` pa
             return None
 
 ### Database Connection Errors
-- Description: Issues with connecting to the PostgreSQL database.
-- Handling: Ensure proper database configuration and implement retry logic.
+- **Description**: Issues with connecting to the PostgreSQL database.
+- **Handling**: Ensure proper database configuration and implement retry logic.
     
     ```sh
     import psycopg2
@@ -104,8 +115,8 @@ The cron job is implemented in the NestJS server using the `@nestjs/schedule` pa
 
 ### Parsing Errors
 
-- Description: Errors while parsing the HTML content of the target websites.
-- Handling: Implement robust error handling and logging in the scrapers.
+- **Description**: Errors while parsing the HTML content of the target websites.
+- **Handling**: Implement robust error handling and logging in the scrapers.
 
     ```sh
     from bs4 import BeautifulSoup
@@ -116,20 +127,33 @@ The cron job is implemented in the NestJS server using the `@nestjs/schedule` pa
             // Parsing logic
         except Exception as e:
             print(f"Parsing error: {e}")
+    
+### Website Structure Changes
+Websites may modify their HTML structure, causing existing scrapers to fail in identifying and extracting data. This requires constant monitoring and adjustment of scraping logic to align with the updated structure.
 
+### Link Changes or Page Removal
+Job postings can change URLs, be removed, or redirected to a different page. Scrapers should handle 404 errors and redirects to ensure smooth operation and detect when a page is no longer available.
+
+### CAPTCHA or Bot Detection
+Some websites implement CAPTCHA challenges or other bot detection mechanisms to block automated scrapers. This may require additional steps, such as using CAPTCHA-solving services or rotating proxies to bypass these blocks.
+
+### Rate Limiting & Request Blocking
+Websites often block scrapers that make too many requests in a short period to prevent overload. To avoid detection, it's important to introduce delays between requests and possibly use techniques like rotating IP addresses or proxies.
 
 
 ## Schema/Model of the Scraped Data
 
-- The scraped job data is stored in a PostgreSQL database with the following schema:
+- The scraped job data is stored in a PostgreSQL database with the following updated schema:
 
     ```sh
     // filepath: src/jobs/jobs.entity.ts
-    import { Entity, Column, PrimaryColumn } from 'typeorm';
+    import { Entity, Column, PrimaryColumn, Unique } from 'typeorm';
+    import { Metadata } from './metadata.entity';
     
     @Entity('jobs')
-    export class Job {
-      @PrimaryColumn()
+    @Unique(["apply_link"])
+    export class Job extends Metadata {
+      @Column({nullable: false})
       apply_link: string;  
     
       @Column({ nullable: true })
@@ -149,11 +173,38 @@ The cron job is implemented in the NestJS server using the `@nestjs/schedule` pa
     }
 
 ### Fields
-- apply_link: The URL to apply for the job (Primary Key).
-- job_title: The title of the job.
-- job_description: The description of the job.
-- location: The location of the job.
-- experience_level: The required experience level for the job.
-- company: The company offering the job.
+- **apply_link**: The URL to apply for the job (Primary Key).
+- **job_title**: The title of the job.
+- **job_description**: The description of the job.
+- **location**: The location of the job.
+- **experience_level**: The required experience level for the job.
+- **company**: The company offering the job.
+- **createdAt**: The timestamp when the job entry was created.
+- **updatedAt**: The timestamp when the job entry was last updated.
+- **id**: A unique integer ID for the job entry, inherited from the Metadata class
 
+### Metadata Class
+The Metadata class provides common fields for all entities, including the unique identifier (id), and timestamps for creation (createdAt) and updates (updatedAt).
+
+```sh
+import {
+    Column,
+    CreateDateColumn,
+    Index,
+    PrimaryGeneratedColumn,
+    UpdateDateColumn,
+  } from "typeorm";
+  
+  export abstract class Metadata {
+    @PrimaryGeneratedColumn({ type: "integer" })
+    id!: number;
+  
+    @CreateDateColumn({ type: "timestamp" })
+    @Index()
+    createdAt!: Date;
+  
+    @UpdateDateColumn({ type: "timestamp" })
+    @Index()
+    updatedAt!: Date;  
+  }
 
