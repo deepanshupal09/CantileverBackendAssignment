@@ -1,4 +1,4 @@
-﻿# CantileverBackendAssignment
+﻿# Cantilever Backend Assignment
  
 This project consists of two main components:
 1. **NestJS Server** - The backend server for handling API requests.
